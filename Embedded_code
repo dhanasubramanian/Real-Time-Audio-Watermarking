@@ -1,0 +1,66 @@
+clc; 
+clear;
+close all;
+
+%% Step 1: Load Audio
+filename = 'input_audio.wav';
+[audio, fs] = audioread(filename);
+audio = audio(:,1);  % Use only first channel
+
+% Convert to int16 for watermarking
+audio_int = int16(audio * 32768);
+
+%% Step 2: Watermark message
+message = '246@EEW%';
+bin_msg = reshape(dec2bin(message,8).'-'0',1,[]); % Row vector of bits
+msg_len_bits = length(bin_msg);
+
+% Safety check
+if msg_len_bits + 1000 > length(audio_int)
+    error('Message too long for this audio file!');
+end
+
+%% Step 3: Embed watermark using LSB
+start_index = 1000;
+for i = 1:msg_len_bits
+    audio_int(start_index+i) = bitset(audio_int(start_index+i), 1, bin_msg(i));
+end
+
+% Convert back to double for saving
+watermarked_audio = double(audio_int)/32768;
+audiowrite('watermarked.wav', watermarked_audio, fs, 'BitsPerSample', 16);
+disp("✅ Watermark embedding complete. File saved as watermarked.wav");
+
+%% Step 4: Extract watermark
+wm_audio = audioread('watermarked.wav');
+wm_audio = wm_audio(:,1);
+audio_int_wm = int16(wm_audio*32768);
+
+extracted_bits = zeros(1, msg_len_bits);
+for i = 1:msg_len_bits
+    extracted_bits(i) = bitget(audio_int_wm(start_index+i),1);
+end
+
+% Convert bits back to characters
+extracted_chars = char(bin2dec(reshape(char(extracted_bits+'0'),8,[])'))';
+
+disp("🔐 Original Message: " + message);
+disp("🔎 Extracted Message: " + extracted_chars);
+
+%% Step 5: Plot Waveforms (Separate Plots)
+t = (0:length(audio)-1)/fs; % Time vector
+
+figure('Name','Audio Waveforms','NumberTitle','off');
+subplot(2,1,1);
+plot(t, audio, 'b', 'LineWidth', 1);
+xlabel('Time (s)'); ylabel('Amplitude');
+title('Original Audio Waveform');
+grid on;
+xlim([0 min(0.05, t(end))]); % Zoom into first 50ms for clarity
+
+subplot(2,1,2);
+plot(t, watermarked_audio, 'r', 'LineWidth', 1);
+xlabel('Time (s)'); ylabel('Amplitude');
+title('Watermarked Audio Waveform');
+grid on;
+xlim([0 min(0.05, t(end))]); % Zoom into first 50ms for clarity
